@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "devops-k8s-challenge.fullname" . }}-test-connection"
+  labels:
+    {{- include "devops-k8s-challenge.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['{{ include "devops-k8s-challenge.fullname" . }}:{{ .Values.service.port }}/my-app']
+  restartPolicy: Never
