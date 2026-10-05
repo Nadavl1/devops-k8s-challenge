@@ -62,7 +62,7 @@ jobs:
           printf 'IMAGE_REF=%s\nCOMMIT_IMAGE=%s\n' "$IMAGE_REF" "$COMMIT_IMAGE" >> "$GITHUB_ENV"
 
       - name: Scan Docker image with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE_REF }}
           format: table
