@@ -49,6 +49,16 @@ jobs:
       - name: Lint Helm chart
         run: helm lint ./devops-k8s-challenge
 
+      - name: Validate application versions
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          APP_VERSION="$(sed -n 's/^appVersion: "\([^"]*\)"/\1/p' ./devops-k8s-challenge/Chart.yaml)"
+          test -n "$APP_VERSION"
+          if [ "$PACKAGE_VERSION" != "$APP_VERSION" ]; then
+            echo "package.json version ($PACKAGE_VERSION) must match Helm appVersion ($APP_VERSION)"
+            exit 1
+          fi
+
       - name: Render Helm chart
         run: helm template test ./devops-k8s-challenge
 

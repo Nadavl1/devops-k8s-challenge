@@ -91,4 +91,12 @@ curl -i -H 'Host: chart-example.local' http://<NODE_IP>/my-app
 
 The workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pushes to `main` and on pull requests. It runs the Node.js tests and dependency audit, Semgrep SAST, Helm lint and rendering, builds the Docker image, and scans it with Trivy. On pushes to `main`, it also publishes version- and commit-tagged images to GitHub Container Registry (GHCR).
 
-The workflow currently builds and publishes the image; Kubernetes deployment through ArgoCD/GitOps is not configured yet. If the GHCR package is private, configure an `imagePullSecret` in the target cluster before deploying from GHCR. The local K3s test instead imports the image directly into containerd.
+### Git and Versioning
+
+Use short-lived feature branches and open a pull request to `main`. Review and merge after the CI checks pass. The workflow runs checks on pull requests and publishes images only after a push to `main`.
+
+Use Semantic Versioning (`MAJOR.MINOR.PATCH`) for the application. Keep `package.json`'s `version` and `Chart.yaml`'s `appVersion` aligned. For each application release, bump both in the pull request; for example, use `1.0.1` for a backward-compatible bug fix. Keep `values.yaml`'s `image.tag` empty so the Deployment template uses `appVersion` as the image tag. This keeps one application-version value for Helm and the version-tagged image. Bump `Chart.yaml`'s `version` separately when the chart templates or chart behavior change.
+
+The CI publishes the image with both the `appVersion` tag and the commit SHA. ArgoCD watches this repository's `main` branch and the `devops-k8s-challenge/` chart directory, then automatically synchronizes chart changes to the K3s cluster. The Argo CD Application manifest is in [`argocd/application.yaml`](argocd/application.yaml). This single-repository GitOps setup keeps application code and its deployment definition together, which is straightforward for this sample project.
+
+The GHCR package is private. The target cluster must have a read-only registry credential configured as an `imagePullSecret`; this chart refers to the `ghcr-pull` Secret in the application namespace. Do not commit registry tokens to Git.
