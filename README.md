@@ -20,6 +20,8 @@ The Helm chart is in [`devops-k8s-challenge/`](devops-k8s-challenge/).
 
 The workload uses a `Deployment`, not a `StatefulSet`, because the HTTP application is stateless: requests can be served by interchangeable replicas, and the application has no persistent per-instance data or stable Pod identity requirement. The in-memory Prometheus counter is temporary telemetry and may reset when a Pod restarts. A Deployment provides replica management, replacement of failed Pods, and rolling updates without the additional identity and storage behavior of a StatefulSet.
 
+This choice keeps the workload simple while still supporting scaling, self-healing, and rolling updates. A `StatefulSet` would be appropriate if replicas needed stable identities or persistent per-replica storage, neither of which this application requires.
+
 The chart configures:
 
 - A `Deployment` with one replica by default.
@@ -90,6 +92,14 @@ curl -i -H 'Host: chart-example.local' http://<NODE_IP>/my-app
 ## CI/CD
 
 The workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pushes to `main` and on pull requests. It runs the Node.js tests and dependency audit, Semgrep SAST, Helm lint and rendering, builds the Docker image, and scans it with Trivy. On pushes to `main`, it also publishes version- and commit-tagged images to GitHub Container Registry (GHCR).
+
+### Security Tool Choices
+
+- `npm audit --audit-level=high` checks the Node.js dependency tree against npm's vulnerability advisories. We use it because it directly understands the npm lockfile and fails the workflow on high- or critical-severity dependency advisories.
+- Semgrep with the `p/security-audit` ruleset performs SAST: it analyzes source code for insecure coding patterns without running the application. The `--error` option makes the workflow fail if Semgrep reports findings from this ruleset. Semgrep severities (`ERROR`, `WARNING`, and `INFO`) are rule severities; they are not the same scale as CVSS `Critical`.
+- Trivy scans the built container image, including operating-system packages and application libraries. It is included because dependency-only auditing does not inspect the complete runtime image. The workflow fails on `HIGH` or `CRITICAL` findings, before login and image publication to GHCR.
+
+Together these checks cover different surfaces: npm dependencies, source-code patterns, and packages included in the final image. We chose these tools because they fit the Node.js/Docker/GitHub Actions stack and provide CI exit statuses that can prevent an unsafe image from being published.
 
 ### Git and Versioning
 
