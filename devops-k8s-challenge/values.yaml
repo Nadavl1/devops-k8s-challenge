@@ -115,7 +115,7 @@ httpRoute:
 resources:
   requests:
     cpu: 100m
-    memory: 128Mi
+    memory: 160Mi
   limits:
     cpu: 500m
     memory: 256Mi  # We usually recommend not to specify default resources and to leave this as a conscious
