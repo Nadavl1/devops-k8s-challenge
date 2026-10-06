@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devops-k8s-challenge
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Nadavl1/devops-k8s-challenge.git
+    targetRevision: main
+    path: devops-k8s-challenge
+    helm:
+      releaseName: devops-k8s-challenge
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
