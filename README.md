@@ -34,9 +34,11 @@ The chart configures:
 - A non-root container security context, no privilege escalation, dropped Linux capabilities, and no automatic ServiceAccount token mount.
 - A Helm test Pod that requests `/my-app` through the Service.
 
+We use Ingress rather than HTTPRoute because the assignment explicitly asks for an Ingress, and K3s includes Traefik configured to handle Kubernetes Ingress resources. HTTPRoute is part of the Gateway API and would require choosing and configuring a Gateway API implementation and Gateway resources. The chart retains an optional HTTPRoute template, but it is disabled because this cluster uses the Ingress path.
+
 The container requests `100m` CPU and has a `500m` CPU limit. The request gives the scheduler a small baseline for placing this lightweight demo workload, while the limit puts an upper bound on CPU use so the application cannot monopolize CPU on the shared single-node demo server. CPU limits are not universally beneficial: under load, a hard limit can throttle a latency-sensitive application. For production, requests and limits should be chosen from observed usage and service objectives; depending on the workload and platform policy, omitting a CPU limit can be appropriate. The memory request (`160Mi`) and limit (`256Mi`) are configured separately because exceeding a memory limit can cause the container to be terminated.
 
-The Ingress hostname is a sample hostname. For local access, configure name resolution for `chart-example.local` to the cluster node address, or send an HTTP request with the matching `Host` header.
+The Ingress hostname is a sample hostname, and this demo Ingress uses HTTP without TLS. For access from the demo network, configure name resolution for `chart-example.local` to the cluster node address, or send an HTTP request with the matching `Host` header. TLS is left out because the demo environment does not have a DNS name and trusted certificate configured; this is not a production TLS configuration.
 
 ## Run and Test Locally
 
@@ -48,11 +50,11 @@ npm test
 npm audit --audit-level=high
 ```
 
-Build and run the container locally:
+Build and run the container locally (the image tag follows the application version):
 
 ```bash
-sudo docker build -t devops-k8s-challenge:1.0 .
-sudo docker run --rm -d --name devops-k8s-challenge-test -p 8080:8080 devops-k8s-challenge:1.0
+sudo docker build -t devops-k8s-challenge:1.0.0 .
+sudo docker run --rm -d --name devops-k8s-challenge-test -p 8080:8080 devops-k8s-challenge:1.0.0
 curl http://localhost:8080/my-app
 sudo docker stop devops-k8s-challenge-test
 ```
@@ -68,19 +70,13 @@ helm lint ./devops-k8s-challenge
 helm template test ./devops-k8s-challenge
 ```
 
-## Deploy to K3s
+## K3s Deployment and GitOps
 
-The chart defaults to the GHCR image `ghcr.io/nadavl1/devops-k8s-challenge:1.0`. For a locally imported image, override the image settings during installation. First import the image into the K3s containerd image store on the target node, then run:
+The image is published to the private GHCR package `ghcr.io/nadavl1/devops-k8s-challenge`. K3s has a read-only `imagePullSecret` named `ghcr-pull` in the application namespace. GitHub Actions builds and scans the image; after a successful push to `main`, it publishes the image and promotes its immutable digest to the `gitops` branch. ArgoCD watches that branch and synchronizes the Helm chart to K3s, so the cluster deploys the exact image that passed the scan.
 
-```bash
-sudo env KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install devops-k8s-challenge ./devops-k8s-challenge \
-	--set image.repository=docker.io/library/devops-k8s-challenge \
-	--set image.tag=1.0 \
-	--set image.pullPolicy=Never \
-	--wait --timeout 3m
-```
+The ArgoCD Application is defined in [`argocd/application.yaml`](argocd/application.yaml). It targets the `gitops` branch and deploys the chart to the `default` namespace in the same cluster. ArgoCD reports sync and health status for the application.
 
-Check the workload and run the Helm test:
+To inspect the workload and run the Helm connection test on the K3s server:
 
 ```bash
 sudo k3s kubectl get pods,services,ingress -o wide
@@ -92,6 +88,18 @@ To verify the Ingress route from a machine that can reach the node:
 ```bash
 curl -i -H 'Host: chart-example.local' http://<NODE_IP>/my-app
 ```
+
+## Deployment Evidence
+
+The application responds through the K3s Ingress:
+
+![Application responding through the K3s Ingress](docs/images/Picture%20APP.png)
+
+ArgoCD reports the application as synced and healthy, and the workload runs from the promoted GHCR image digest:
+
+![ArgoCD sync status and K3s workload](docs/images/Picture%20argoCD.png)
+
+The successful GitHub Actions run that validated, scanned, built, and published the image is available [here](https://github.com/Nadavl1/devops-k8s-challenge/actions/runs/37619768776).
 
 ## CI/CD
 
