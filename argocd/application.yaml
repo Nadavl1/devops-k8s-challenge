@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/Nadavl1/devops-k8s-challenge.git
-    targetRevision: main
+    targetRevision: gitops
     path: devops-k8s-challenge
     helm:
       releaseName: devops-k8s-challenge

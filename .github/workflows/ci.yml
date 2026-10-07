@@ -7,13 +7,10 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   validate:
     runs-on: ubuntu-latest
-    env:
-      IMAGE_NAME: ghcr.io/nadavl1/devops-k8s-challenge
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -61,6 +58,21 @@ jobs:
 
       - name: Render Helm chart
         run: helm template test ./devops-k8s-challenge
+  publish:
+    name: Publish and promote image
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    env:
+      IMAGE_NAME: ghcr.io/nadavl1/devops-k8s-challenge
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Build Docker image
         run: |
@@ -82,15 +94,31 @@ jobs:
           severity: HIGH,CRITICAL
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push Docker image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Push image and capture digest
         run: |
-          docker push "$IMAGE_REF"
+          PUSH_OUTPUT="$(docker push "$IMAGE_REF" 2>&1)"
+          printf '%s\n' "$PUSH_OUTPUT"
+          IMAGE_DIGEST="$(printf '%s\n' "$PUSH_OUTPUT" | sed -nE 's/.*digest: (sha256:[0-9a-f]{64}).*/\1/p' | tail -n 1)"
+          test -n "$IMAGE_DIGEST"
           docker push "$COMMIT_IMAGE"
+          printf 'IMAGE_DIGEST=%s\n' "$IMAGE_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Promote digest to GitOps branch
+        run: |
+          git fetch origin
+          git checkout -B gitops origin/gitops
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge --no-edit origin/main
+          sed -i -E "s|^  digest:.*|  digest: \"$IMAGE_DIGEST\"|" ./devops-k8s-challenge/values.yaml
+          if ! git diff --quiet -- ./devops-k8s-challenge/values.yaml; then
+            git add ./devops-k8s-challenge/values.yaml
+            git commit -m "Promote image ${IMAGE_DIGEST}"
+          fi
+          git push origin HEAD:gitops
