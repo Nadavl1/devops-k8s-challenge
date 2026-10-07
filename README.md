@@ -22,6 +22,8 @@ The workload uses a `Deployment`, not a `StatefulSet`, because the HTTP applicat
 
 This choice keeps the workload simple while still supporting scaling, self-healing, and rolling updates. A `StatefulSet` would be appropriate if replicas needed stable identities or persistent per-replica storage, neither of which this application requires.
 
+The chart defaults to one replica because this is a learning/demo deployment on a single-node K3s cluster, and keeping the resource footprint small is appropriate for that environment. This is not a production availability target: a production deployment would typically run at least two replicas and distribute them across nodes so one Pod can remain available during a Pod failure or rollout. Multiple replicas on a single node do not protect against loss of that node. Horizontal Pod Autoscaling could be added when workload metrics and suitable resource requests are available.
+
 The chart configures:
 
 - A `Deployment` with one replica by default.
@@ -31,6 +33,8 @@ The chart configures:
 - CPU and memory requests and limits.
 - A non-root container security context, no privilege escalation, dropped Linux capabilities, and no automatic ServiceAccount token mount.
 - A Helm test Pod that requests `/my-app` through the Service.
+
+The container requests `100m` CPU and has a `500m` CPU limit. The request gives the scheduler a small baseline for placing this lightweight demo workload, while the limit puts an upper bound on CPU use so the application cannot monopolize CPU on the shared single-node demo server. CPU limits are not universally beneficial: under load, a hard limit can throttle a latency-sensitive application. For production, requests and limits should be chosen from observed usage and service objectives; depending on the workload and platform policy, omitting a CPU limit can be appropriate. The memory request (`160Mi`) and limit (`256Mi`) are configured separately because exceeding a memory limit can cause the container to be terminated.
 
 The Ingress hostname is a sample hostname. For local access, configure name resolution for `chart-example.local` to the cluster node address, or send an HTTP request with the matching `Host` header.
 
